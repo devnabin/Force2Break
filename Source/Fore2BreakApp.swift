@@ -88,6 +88,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var loopEnabled = false
     private var breakSound: BreakSound = .defaultSound
     private var activityCount: () -> UInt64? = { ActivitySource.interactionCount() }
+    private var awayDetector = AwayDetector()
+    /// Set when focus was abandoned because the user stepped away; the next
+    /// interaction restarts focus even with Loop off.
+    private var awayResumePending = false
     private let breakCompletionSound = BreakCompletionSound()
     private lazy var playBreakCompletionSound: (BreakSound) -> Void = { [weak self] sound in
         _ = self?.breakCompletionSound.play(sound)
@@ -373,6 +377,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private func startFocus() {
         guard engine.start(now: now) else { return }
         resumeGate.cancel()
+        awayResumePending = false
+        awayDetector.reset(activityCount: activityCount(), now: now)
         circlePanel?.orderOut(nil)
         setupWindow?.orderOut(nil)
         setupWindow = nil
@@ -393,6 +399,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     @objc private func tick() {
         let instant = now
+        checkForAway(at: instant)
         let transition = engine.tick(now: instant)
         synchronizeModel(at: instant)
         if transition == .focusEnded { beginBreak() }
@@ -402,7 +409,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             // Emergency exit also restores the desktop, but must stay silent.
             if breakSound != .none { playBreakCompletionSound(breakSound) }
         }
-        if engine.phase == .ready, setupWindow == nil, loopEnabled, resumeGate.isArmed,
+        if engine.phase == .ready, setupWindow == nil, loopEnabled || awayResumePending, resumeGate.isArmed,
            resumeGate.consume(activityCount: activityCount()) {
             startFocus()
         }
@@ -415,13 +422,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         updateMenu()
     }
 
+    /// Time away from the Mac during focus already rests the eyes, so it should
+    /// not be followed by a break screen. Away means no input for at least
+    /// 5 minutes, or for the round's break length if that is longer.
+    /// The abandoned round is not counted; focus restarts when the user returns.
+    private func checkForAway(at instant: Date) {
+        guard !testing, engine.phase == .focusing else { return }
+        let threshold = TimeInterval(max(5, engine.activeBreakMinutes ?? engine.breakMinutes) * 60)
+        let count = activityCount()
+        switch awayDetector.observe(activityCount: count, now: instant, threshold: threshold,
+                                    presenceHeld: ActivitySource.displayKeptAwake()) {
+        case .present:
+            return
+        case .returned:
+            engine.reset()
+            startFocus()
+        case .away:
+            engine.reset()
+            resumeGate.arm(activityCount: count)
+            awayResumePending = resumeGate.isArmed
+            synchronizeModel(at: instant)
+            if !awayResumePending { showCircle() }
+        }
+    }
+
     private func updateMenu() {
         guard statusItem != nil else { return }
         let round = "R: \(engine.currentRound)"
         switch engine.phase {
         case .ready:
             statusItem.button?.title = " \(round) | Ready"
-            if resumeGate.isArmed {
+            if awayResumePending && resumeGate.isArmed {
+                statusItem.button?.title = " \(round) | Away"
+                statusItem.button?.toolTip = "Fore2Break · you stepped away, so focus restarts when you return"
+                stateItem.title = "Away · \(engine.focusMinutes) min focus restarts when you return"
+            } else if resumeGate.isArmed {
                 statusItem.button?.toolTip = "Fore2Break · your next interaction starts \(engine.focusMinutes) minutes of focus"
                 stateItem.title = "\(round) completed · Loop is waiting for you"
             } else if loopEnabled {
@@ -522,6 +557,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     private func emergencyExit() {
         resumeGate.cancel()
+        awayResumePending = false
         engine.reset()
         synchronizeModel(at: now)
         finishBreak(allowAutomaticResume: false)
