@@ -1,0 +1,65 @@
+# Swift compiler, SwiftPM, and local build output
+.build/
+.swiftpm/
+build/
+Build/
+dist/
+DerivedData/
+ModuleCache/
+.module-cache/
+.package-cache/
+
+# Per-user Xcode state
+xcuserdata/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+
+# Generated applications, archives, and debug symbols
+*.app/
+*.zip
+*.dSYM/
+
+# Supply completion audio locally; do not upload the private clip.
+/Resources/BreakComplete.mp3
+Voicy_Developers developers developers.mp3
+
+# Local environment settings; keep a shareable example available.
+.env
+.env.*
+local.env
+*.local.env
+!.env.example
+
+# macOS Finder and filesystem metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100/
+.Trashes/
+.fseventsd/
+
+# Logs, crash reports, and temporary editor files
+*.log
+*.crash
+*.ips
+*.dmp
+*.stackdump
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.#*
+\#*\#
+
+# Workspace scratch files
+/work/
+/scratch/
+/tmp/
+/temp/
+
+# custome edit
+/Force2Break.app
+content.txt
