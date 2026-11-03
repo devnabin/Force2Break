@@ -206,7 +206,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     private func configureMenu() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.image = NSImage(systemSymbolName: "circle.dotted.circle", accessibilityDescription: "Fore2Break")
+        // UPDATE 2026-11-03: Start with the empty progress ring instead of the dotted circle — it fills up during focus.
+        statusItem.button?.image = MenuBarIcon.ring(progress: 0)
         statusItem.button?.imagePosition = .imageLeading
         statusItem.button?.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
         let menu = NSMenu()
@@ -500,14 +501,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         return cachedCallInProgress
     }
 
+    // UPDATE 2026-11-03: Menu bar now reads "<time> F1B" with an icon per state (filling ring, leaf, moon, phone) — easier to read at a glance.
     private func updateMenu() {
         guard statusItem != nil else { return }
         let round = "R: \(engine.currentRound)"
+        // Rounds start at 1. While waiting between rounds, show the next one.
+        let label = MenuBarIcon.roundLabel(engine.phase == .ready ? engine.upcomingRound : engine.currentRound)
         switch engine.phase {
         case .ready:
-            statusItem.button?.title = " \(round) | Ready"
+            statusItem.button?.title = " Ready \(label)"
+            setMenuBarIcon("ring-0") { MenuBarIcon.ring(progress: 0) }
             if awayResumePending && resumeGate.isArmed {
-                statusItem.button?.title = " \(round) | Away"
+                statusItem.button?.title = " Away \(label)"
+                setMenuBarIcon("away") { MenuBarIcon.symbol("moon.zzz", description: "Away") }
                 statusItem.button?.toolTip = "Fore2Break · you stepped away, so focus restarts when you return"
                 stateItem.title = "Away · \(engine.focusMinutes) min focus restarts when you return"
             } else if resumeGate.isArmed {
@@ -522,17 +528,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             }
         case .focusing where callHold.isHolding:
             let limit = BreakView.timeString(Int(ceil(callHold.remainingDelay(now: now))))
-            statusItem.button?.title = " \(round) | On a call"
+            statusItem.button?.title = " On a call \(label)"
+            setMenuBarIcon("call") { MenuBarIcon.symbol("phone.fill", description: "On a call") }
             statusItem.button?.toolTip = "Fore2Break · your break starts when the call ends, or in \(limit)"
             stateItem.title = "\(round) · Break waits for your call · at most \(limit)"
         case .focusing:
             let remaining = BreakView.timeString(engine.remainingSeconds(now: now))
-            statusItem.button?.title = " \(round) | \(remaining)"
+            statusItem.button?.title = " \(remaining) \(label)"
+            // Redraw the ring in 2% steps, not on every 0.2-second tick.
+            let step = Int((focusProgress * 50).rounded(.down))
+            setMenuBarIcon("ring-\(step)") { MenuBarIcon.ring(progress: Double(step) / 50) }
             statusItem.button?.toolTip = "Fore2Break · \(round) · break in \(remaining)"
             stateItem.title = "\(round) · Focusing · \(engine.isLongBreak ? "10-min long break next" : "break in " + remaining)"
         case .breaking:
             let remaining = BreakView.timeString(engine.remainingSeconds(now: now))
-            statusItem.button?.title = " \(round) | \(remaining)"
+            statusItem.button?.title = " \(remaining) \(label)"
+            setMenuBarIcon("break") { MenuBarIcon.symbol("leaf.fill", description: "On a break") }
             statusItem.button?.toolTip = "Fore2Break · \(round) · \(engine.isLongBreak ? "Long break" : "Break")"
             stateItem.title = "\(round) · \(engine.isLongBreak ? "10-minute long break" : "Taking a break")"
         }
@@ -541,6 +552,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         quitItem.isEnabled = engine.phase != .breaking
         statusItem.menu?.item(withTag: 7)?.isEnabled = engine.phase == .ready && !loopEnabled && setupWindow == nil
         statusItem.menu?.item(withTag: 8)?.isEnabled = engine.phase == .ready
+    }
+
+    // UPDATE 2026-11-03: Helpers for the new menu bar icon — only swap the image when it actually changes.
+    private var menuBarIconKey = ""
+
+    private func setMenuBarIcon(_ key: String, _ make: () -> NSImage?) {
+        guard key != menuBarIconKey, let image = make() else { return }
+        menuBarIconKey = key
+        statusItem.button?.image = image
+    }
+
+    /// How much of the current focus has passed, from 0 to 1.
+    private var focusProgress: Double {
+        guard engine.phase == .focusing, let start = engine.phaseStartedAt,
+              let duration = engine.phaseDuration, duration > 0 else { return 0 }
+        return min(1, max(0, now.timeIntervalSince(start) / duration))
     }
 
     private func beginBreak() {
@@ -683,8 +710,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             updateMenu()
             if let button = statusItem.button {
                 // Use the real status title and its font in a readable menu-bar preview.
+                // UPDATE 2026-11-03: Preview shows the real menu bar icon (filling ring) instead of a fixed symbol.
                 try save(HStack(spacing: 7) {
-                    Image(systemName: "circle.dotted.circle").font(.system(size: 17))
+                    Image(nsImage: button.image ?? MenuBarIcon.ring(progress: 0)).renderingMode(.template)
+                        .resizable().frame(width: 17, height: 17)
                     Text(button.title.trimmingCharacters(in: .whitespaces))
                         .font(Font(button.font ?? .monospacedDigitSystemFont(ofSize: 12, weight: .regular)))
                 }.foregroundStyle(.white).padding(.horizontal, 12).padding(.vertical, 7)
@@ -959,7 +988,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         resumeGate.cancel()
         for round in 1...8 {
             startFocus()
-            check(model.roundNumber == round && statusItem.button?.title.contains("R: \(round) |") == true, "menu and focus share the current round")
+            // UPDATE 2026-11-03: Menu bar label changed from "R: n |" to "<time> FnB".
+            check(model.roundNumber == round && statusItem.button?.title.hasSuffix(" F\(round)B") == true, "menu and focus share the current round")
             check(circlePanel?.isVisible != true, "Loop focus has no circle")
             testAdvance += 1201
             tick()
