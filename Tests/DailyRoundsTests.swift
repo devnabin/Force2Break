@@ -69,6 +69,31 @@ enum DailyRoundsTests {
         expect(engine.restoreCompletedRounds(0) && engine.upcomingRound == 1 && engine.activeBreakMinutes == nil,
                "A new day restores to zero")
 
+        // Daily summary: rounds and focus time of completed rounds.
+        var summary = DailyRounds(day: "2026-11-02")
+        expect(summary.summary == "Today: no rounds yet", "An empty day says no rounds yet")
+        summary.recordRound(today: "2026-11-02", focusMinutes: 20)
+        expect(summary.summary == "Today: 1 round · 20m focused", "One round uses the singular")
+        summary.recordRound(today: "2026-11-02", focusMinutes: 25)
+        summary.recordRound(today: "2026-11-02", focusMinutes: 15)
+        expect(summary.focusMinutes == 60 && summary.summary == "Today: 3 rounds · 1h 0m focused",
+               "Mixed focus times add up, shown in hours and minutes")
+        for _ in 1...3 { summary.recordRound(today: "2026-11-02", focusMinutes: 20) }
+        expect(summary.summary == "Today: 6 rounds · 2h 0m focused", "Six 20-minute rounds are 2 hours")
+        summary.recordRound(today: "2026-11-02", focusMinutes: 10)
+        expect(summary.summary == "Today: 7 rounds · 2h 10m focused", "Minutes past the hour are shown")
+
+        let reopened = DailyRounds(day: summary.day, rounds: summary.rounds, focusMinutes: summary.focusMinutes)
+        expect(reopened == summary, "Saved rounds and focus time come back after reopening")
+        var nextDay = reopened
+        expect(nextDay.roll(to: "2026-11-03") && nextDay.summary == "Today: no rounds yet",
+               "A new day clears both rounds and focus time")
+        expect(nextDay.recordRound(today: "2026-11-04", focusMinutes: 25) == true
+               && nextDay.summary == "Today: 1 round · 25m focused",
+               "A round finishing on a new day starts that day's summary")
+        expect(DailyRounds(day: "2026-11-02", rounds: 1, focusMinutes: -5).focusMinutes == 0,
+               "Negative saved focus time becomes zero")
+
         print("DailyRounds: \(assertions) assertions passed.")
     }
 }

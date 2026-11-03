@@ -95,6 +95,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var callHold = CallHold()
     private var todayKey: () -> String = { DailyRounds.dayKey(for: Date()) }
     private lazy var dailyRounds = DailyRounds(day: todayKey())
+    /// Focus length of the round in progress, counted toward today when it completes.
+    private var currentFocusMinutes = 0
+    private var todayItem: NSMenuItem!
     private var lastCallCheck: Date?
     private var cachedCallInProgress = false
     private let breakCompletionSound = BreakCompletionSound()
@@ -133,7 +136,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         engine = SessionEngine(focusMinutes: focus, breakMinutes: pause)
         // Keep today's rounds across relaunches; a new day starts at zero.
         dailyRounds = DailyRounds(day: preferences.string(forKey: "roundsDay") ?? todayKey(),
-                                  rounds: preferences.integer(forKey: "roundsToday"))
+                                  rounds: preferences.integer(forKey: "roundsToday"),
+                                  focusMinutes: preferences.integer(forKey: "focusMinutesToday"))
         dailyRounds.roll(to: todayKey())
         engine.restoreCompletedRounds(dailyRounds.rounds)
         saveDailyRounds()
@@ -210,6 +214,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         stateItem = NSMenuItem(title: "Ready · click your circle", action: nil, keyEquivalent: "")
         stateItem.isEnabled = false
         menu.addItem(stateItem)
+        todayItem = NSMenuItem(title: dailyRounds.summary, action: nil, keyEquivalent: "")
+        todayItem.isEnabled = false
+        menu.addItem(todayItem)
         menu.addItem(.separator())
         settingsItem = NSMenuItem(title: "Focus & break settings…", action: #selector(showSettings(_:)), keyEquivalent: ",")
         settingsItem.target = self
@@ -387,6 +394,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     private func startFocus() {
         guard engine.start(now: now) else { return }
+        currentFocusMinutes = engine.focusMinutes
         resumeGate.cancel()
         awayResumePending = false
         callHold.reset()
@@ -417,7 +425,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         if transition == .focusEnded { beginBreak() }
         if transition == .breakEnded {
             // A round finishing after midnight starts the new day's count.
-            if dailyRounds.recordRound(today: todayKey()) { engine.restoreCompletedRounds(dailyRounds.rounds) }
+            if dailyRounds.recordRound(today: todayKey(), focusMinutes: currentFocusMinutes) { engine.restoreCompletedRounds(dailyRounds.rounds) }
             saveDailyRounds()
             synchronizeModel(at: instant)
             finishBreak()
@@ -448,6 +456,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private func saveDailyRounds() {
         preferences.set(dailyRounds.day, forKey: "roundsDay")
         preferences.set(dailyRounds.rounds, forKey: "roundsToday")
+        preferences.set(dailyRounds.focusMinutes, forKey: "focusMinutesToday")
     }
 
     /// Time away from the Mac during focus already rests the eyes, so it should
@@ -527,6 +536,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             statusItem.button?.toolTip = "Fore2Break · \(round) · \(engine.isLongBreak ? "Long break" : "Break")"
             stateItem.title = "\(round) · \(engine.isLongBreak ? "10-minute long break" : "Taking a break")"
         }
+        todayItem.title = dailyRounds.summary
         settingsItem.isEnabled = engine.phase != .breaking
         quitItem.isEnabled = engine.phase != .breaking
         statusItem.menu?.item(withTag: 7)?.isEnabled = engine.phase == .ready && !loopEnabled && setupWindow == nil
