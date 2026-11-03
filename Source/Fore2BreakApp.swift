@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 import SwiftUI
 
 @main
@@ -80,7 +81,7 @@ final class CircleControl: NSView {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuDelegate {
     let model = AppModel()
     private var engine = SessionEngine()
     private var resumeGate = AutoResumeGate()
@@ -207,11 +208,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         showCircleItem.tag = 7
         menu.addItem(showCircleItem)
         menu.addItem(.separator())
+        let loginItem = NSMenuItem(title: "Launch at login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        loginItem.target = self
+        loginItem.tag = 9
+        menu.addItem(loginItem)
+        menu.addItem(.separator())
         quitItem = NSMenuItem(title: "Quit Fore2Break", action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
+        menu.delegate = self
         statusItem.menu = menu
         updateMenu()
+        refreshLaunchAtLoginItem()
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        // The user can also change this in System Settings › General › Login Items.
+        refreshLaunchAtLoginItem()
+    }
+
+    private func refreshLaunchAtLoginItem() {
+        guard let item = statusItem?.menu?.item(withTag: 9) else { return }
+        switch SMAppService.mainApp.status {
+        case .enabled:
+            item.state = .on
+            item.toolTip = "Fore2Break opens automatically when you log in"
+        case .requiresApproval:
+            item.state = .mixed
+            item.toolTip = "Allow Fore2Break in System Settings › General › Login Items"
+        default:
+            item.state = .off
+            item.toolTip = "Open Fore2Break automatically when you log in"
+        }
+    }
+
+    @objc private func toggleLaunchAtLogin() {
+        let service = SMAppService.mainApp
+        do {
+            switch service.status {
+            case .enabled:
+                try service.unregister()
+            case .requiresApproval:
+                SMAppService.openSystemSettingsLoginItems()
+            default:
+                try service.register()
+                if service.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
+            }
+        } catch {
+            NSLog("Fore2Break: could not change launch at login: %@", error.localizedDescription)
+            SMAppService.openSystemSettingsLoginItems()
+        }
+        refreshLaunchAtLoginItem()
     }
 
     @objc func showSettings(_ sender: Any?) {
