@@ -52,6 +52,15 @@ struct SessionEngine {
             ? breakMinutes : Self.defaultBreakMinutes
     }
 
+    /// Restores a saved completed-round count, such as today's rounds after the
+    /// app is reopened. Only allowed while ready, so a running round is untouched.
+    @discardableResult
+    mutating func restoreCompletedRounds(_ count: Int) -> Bool {
+        guard phase == .ready, count >= 0 else { return false }
+        completedRounds = count
+        return true
+    }
+
     /// Updates the next cycle's settings atomically without changing this cycle.
     @discardableResult
     mutating func updateSettings(focusMinutes: Int, breakMinutes: Int) -> Bool {

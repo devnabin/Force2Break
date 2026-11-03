@@ -27,7 +27,7 @@ So I decided to vibe code **Fore2Break** with AI assistance. It’s a small nati
 | Break sound | Default | No sound, Developer, Default (macOS Glass chime). Use **Preview** to hear the selected sound. |
 | Loop | Off | On or off |
 
-Your durations, sound choice, and Loop preference are saved. Choose **Launch at login** in the menu bar menu to open Fore2Break automatically when you log in. The menu bar shows the round indicator, remaining time, and settings. **The app must stay open** for its timers and break screens to work.
+Your durations, sound choice, and Loop preference are saved. Today's round count is saved too, so quitting the app keeps it; it starts again at 0 each new day. Choose **Launch at login** in the menu bar menu to open Fore2Break automatically when you log in. The menu bar shows the round indicator, remaining time, and settings. **The app must stay open** for its timers and break screens to work.
 
 ### A longer pause every four rounds
 

@@ -28,6 +28,11 @@ SDK_PATH="$(/usr/bin/xcrun --sdk macosx --show-sdk-path)"
   "$PROJECT_DIR/Tests/CallHoldTests.swift" -o "$BUILD_DIR/CallHoldTests"
 "$BUILD_DIR/CallHoldTests"
 
+/usr/bin/xcrun swiftc -sdk "$SDK_PATH" -module-cache-path "$BUILD_DIR/ModuleCache" \
+  -parse-as-library -O "$PROJECT_DIR/Source/DailyRounds.swift" "$PROJECT_DIR/Source/SessionEngine.swift" \
+  "$PROJECT_DIR/Tests/DailyRoundsTests.swift" -o "$BUILD_DIR/DailyRoundsTests"
+"$BUILD_DIR/DailyRoundsTests"
+
 if [ "${RUN_UI_TESTS:-0}" = "1" ]; then
   APP_EXECUTABLE="$OUTPUT_DIR/Fore2Break.app/Contents/MacOS/Fore2Break"
   if [ ! -x "$APP_EXECUTABLE" ]; then

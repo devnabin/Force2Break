@@ -93,6 +93,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     /// interaction restarts focus even with Loop off.
     private var awayResumePending = false
     private var callHold = CallHold()
+    private var todayKey: () -> String = { DailyRounds.dayKey(for: Date()) }
+    private lazy var dailyRounds = DailyRounds(day: todayKey())
     private var lastCallCheck: Date?
     private var cachedCallInProgress = false
     private let breakCompletionSound = BreakCompletionSound()
@@ -129,6 +131,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let focus = preferences.object(forKey: "focusMinutes") as? Int ?? 20
         let pause = preferences.object(forKey: "breakMinutes") as? Int ?? 3
         engine = SessionEngine(focusMinutes: focus, breakMinutes: pause)
+        // Keep today's rounds across relaunches; a new day starts at zero.
+        dailyRounds = DailyRounds(day: preferences.string(forKey: "roundsDay") ?? todayKey(),
+                                  rounds: preferences.integer(forKey: "roundsToday"))
+        dailyRounds.roll(to: todayKey())
+        engine.restoreCompletedRounds(dailyRounds.rounds)
+        saveDailyRounds()
         model.focusMinutes = engine.focusMinutes
         model.breakMinutes = engine.breakMinutes
         synchronizeModel(at: now)
@@ -408,10 +416,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         synchronizeModel(at: instant)
         if transition == .focusEnded { beginBreak() }
         if transition == .breakEnded {
+            // A round finishing after midnight starts the new day's count.
+            if dailyRounds.recordRound(today: todayKey()) { engine.restoreCompletedRounds(dailyRounds.rounds) }
+            saveDailyRounds()
+            synchronizeModel(at: instant)
             finishBreak()
             // Only a naturally completed countdown signals a return to work.
             // Emergency exit also restores the desktop, but must stay silent.
             if breakSound != .none { playBreakCompletionSound(breakSound) }
+        }
+        // Past midnight while idle: start the new day at zero. A round still
+        // running at midnight is handled when it finishes (see breakEnded).
+        if engine.phase == .ready, dailyRounds.roll(to: todayKey()) {
+            engine.restoreCompletedRounds(0)
+            saveDailyRounds()
+            synchronizeModel(at: instant)
         }
         if engine.phase == .ready, setupWindow == nil, loopEnabled || awayResumePending, resumeGate.isArmed,
            resumeGate.consume(activityCount: activityCount()) {
@@ -424,6 +443,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             if seconds >= 3 { emergencyExit() }
         }
         updateMenu()
+    }
+
+    private func saveDailyRounds() {
+        preferences.set(dailyRounds.day, forKey: "roundsDay")
+        preferences.set(dailyRounds.rounds, forKey: "roundsToday")
     }
 
     /// Time away from the Mac during focus already rests the eyes, so it should
