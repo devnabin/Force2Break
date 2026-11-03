@@ -155,11 +155,15 @@ enum SessionEngineTests {
 
         // Explicit schedules verify both the fourth and eighth round for every
         // selectable short break, rather than deriving the expected cadence.
-        for shortMinutes in [2, 3, 4, 5] {
-            var engine = SessionEngine(focusMinutes: 10, breakMinutes: shortMinutes)
+        for focusMinutes in SessionEngine.focusOptions {
+        for shortMinutes in SessionEngine.breakOptions {
+            var engine = SessionEngine(focusMinutes: focusMinutes, breakMinutes: shortMinutes)
+            expect(engine.focusMinutes == focusMinutes && engine.breakMinutes == shortMinutes,
+                   "Every selectable focus and break pair must be accepted")
             var start = origin
             let short = TimeInterval(shortMinutes * 60)
-            let expectedBreaks = [short, short, short, 600, short, short, short, 600]
+            let expectedBreaks = [short, short, short, 600, short, short, short, 600,
+                                  short, short, short, 600]
 
             for (index, breakSeconds) in expectedBreaks.enumerated() {
                 let round = index + 1
@@ -175,7 +179,9 @@ enum SessionEngineTests {
                        && engine.activeBreakMinutes == Int(breakSeconds / 60),
                        "The round must snapshot its scheduled break at Start")
 
-                let focusEnd = start.addingTimeInterval(600)
+                let focusEnd = start.addingTimeInterval(TimeInterval(focusMinutes * 60))
+                expect(engine.tick(now: focusEnd.addingTimeInterval(-0.001)) == nil,
+                       "Focus must last its full selected duration")
                 expect(engine.tick(now: focusEnd) == .focusEnded,
                        "Each round must finish focus before its break")
                 expect(engine.phaseDuration == breakSeconds
@@ -200,6 +206,26 @@ enum SessionEngineTests {
                        "An idle reset must preserve the completed total")
                 start = breakEnd.addingTimeInterval(1)
             }
+        }
+        }
+
+        // Changing focus time between rounds must not shift the long-break cadence.
+        var mixed = SessionEngine(focusMinutes: 25, breakMinutes: 3)
+        var start = origin
+        for round in 1...8 {
+            let focusMinutes = SessionEngine.focusOptions[(round - 1) % SessionEngine.focusOptions.count]
+            expect(mixed.updateSettings(focusMinutes: focusMinutes, breakMinutes: 3),
+                   "Focus time may change between rounds")
+            expect(mixed.start(now: start), "Each mixed-focus round must start")
+            let focusEnd = start.addingTimeInterval(TimeInterval(focusMinutes * 60))
+            expect(mixed.tick(now: focusEnd) == .focusEnded, "Mixed-focus round must finish focus")
+            let expected = round.isMultiple(of: 4) ? 600.0 : 180.0
+            expect(mixed.isLongBreak == round.isMultiple(of: 4) && mixed.phaseDuration == expected,
+                   "Every fourth round must get 10 minutes regardless of focus changes")
+            let breakEnd = focusEnd.addingTimeInterval(expected)
+            expect(mixed.tick(now: breakEnd) == .breakEnded && mixed.completedRounds == round,
+                   "Mixed-focus break must complete its round")
+            start = breakEnd.addingTimeInterval(1)
         }
     }
 

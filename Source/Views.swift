@@ -11,6 +11,7 @@ final class AppModel: ObservableObject {
     @Published var focusMinutes = 20
     @Published var breakMinutes = 3
     @Published var loopEnabled = false
+    @Published var breakSound: BreakSound = .defaultSound
     @Published var phase: SessionEngine.Phase = .ready
     @Published var remaining = 180
     @Published var breakDuration = 180.0
@@ -34,13 +35,17 @@ struct Brand: View {
 }
 
 struct SetupView: View {
+    static let size = CGSize(width: 284, height: 404)
+
     @ObservedObject var model: AppModel
     var save: () -> Void
+    var preview: (BreakSound) -> Void = { _ in }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             durationRow(title: "Focus · minutes", options: SessionEngine.focusOptions, value: $model.focusMinutes)
             durationRow(title: "Break · minutes", options: SessionEngine.breakOptions, value: $model.breakMinutes)
+            soundRow
             Button {
                 withAnimation(.easeInOut(duration: 0.15)) { model.loopEnabled.toggle() }
             } label: {
@@ -78,8 +83,55 @@ struct SetupView: View {
                 .frame(maxWidth: .infinity)
         }
         .padding(20)
-        .frame(width: 284, height: 316)
+        .frame(width: Self.size.width, height: Self.size.height)
         .background(Palette.paper)
+    }
+
+    private var soundRow: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 0) {
+                Text("Break sound").font(.system(size: 10, weight: .medium)).foregroundStyle(Palette.muted)
+                Spacer(minLength: 6)
+                Button { preview(model.breakSound) } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: "play.fill").font(.system(size: 7, weight: .bold))
+                        Text("Preview").font(.system(size: 9, weight: .medium))
+                    }
+                    .padding(.horizontal, 7).frame(height: 16)
+                    .foregroundStyle(Palette.ink)
+                    .background(Color.white.opacity(0.9), in: Capsule())
+                    .overlay(Capsule().stroke(Palette.ink.opacity(0.08), lineWidth: 1))
+                    .contentShape(Capsule())
+                }.buttonStyle(.plain)
+                    .disabled(model.breakSound == .none)
+                    .opacity(model.breakSound == .none ? 0.35 : 1)
+                    .accessibilityLabel("Preview \(model.breakSound.title) sound")
+                    .help(model.breakSound == .none ? "No sound to preview" : "Play the \(model.breakSound.title.lowercased()) sound once")
+            }
+            HStack(spacing: 3) {
+                ForEach(BreakSound.allCases, id: \.self) { sound in
+                    let selected = model.breakSound == sound
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) { model.breakSound = sound }
+                    } label: {
+                        VStack(spacing: 5) {
+                            Image(systemName: sound.symbol).font(.system(size: 12, weight: .medium))
+                            Text(sound.title).font(.system(size: 10, weight: selected ? .semibold : .regular))
+                        }
+                        .frame(maxWidth: .infinity).frame(height: 44)
+                        .foregroundStyle(selected ? Color.white : Palette.ink)
+                        .background {
+                            if selected { Capsule().fill(Palette.ink) }
+                        }
+                        .contentShape(Capsule())
+                    }.buttonStyle(.plain)
+                        .accessibilityLabel("Break sound: \(sound.title)")
+                        .accessibilityAddTraits(selected ? [.isSelected] : [])
+                        .help(sound == .none ? "Finish breaks silently" : "Play the \(sound.title.lowercased()) sound when your break ends")
+                }
+            }.padding(3).background(Color.white.opacity(0.9), in: Capsule())
+                .overlay(Capsule().stroke(Palette.ink.opacity(0.08), lineWidth: 1))
+        }
     }
 
     private func durationRow(title: String, options: [Int], value: Binding<Int>) -> some View {

@@ -85,10 +85,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var engine = SessionEngine()
     private var resumeGate = AutoResumeGate()
     private var loopEnabled = false
+    private var breakSound: BreakSound = .defaultSound
     private var activityCount: () -> UInt64? = { ActivitySource.interactionCount() }
     private let breakCompletionSound = BreakCompletionSound()
-    private lazy var playBreakCompletionSound: () -> Void = { [weak self] in
-        _ = self?.breakCompletionSound.play()
+    private lazy var playBreakCompletionSound: (BreakSound) -> Void = { [weak self] sound in
+        _ = self?.breakCompletionSound.play(sound)
     }
     private let continuousClock = ContinuousClock()
     private let clockOrigin = ContinuousClock.now
@@ -125,6 +126,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         synchronizeModel(at: now)
         loopEnabled = preferences.bool(forKey: "loopEnabled")
         model.loopEnabled = loopEnabled
+        breakSound = BreakSound(preference: preferences.string(forKey: "breakSound"))
+        model.breakSound = breakSound
         configureMenu()
         NotificationCenter.default.addObserver(self, selector: #selector(displaysChanged), name: NSApplication.didChangeScreenParametersNotification, object: nil)
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(wokeUp), name: NSWorkspace.didWakeNotification, object: nil)
@@ -219,7 +222,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         model.focusMinutes = engine.focusMinutes
         model.breakMinutes = engine.breakMinutes
         model.loopEnabled = loopEnabled
-        let window = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 284, height: 316), styleMask: [.titled, .closable, .utilityWindow], backing: .buffered, defer: false)
+        model.breakSound = breakSound
+        let window = NSPanel(contentRect: NSRect(origin: .zero, size: SetupView.size), styleMask: [.titled, .closable, .utilityWindow], backing: .buffered, defer: false)
         window.title = "Fore2Break"
         window.titlebarAppearsTransparent = true
         window.level = .floating
@@ -228,9 +232,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.isReleasedWhenClosed = false
         window.delegate = self
         window.backgroundColor = NSColor(calibratedRed: 0.97, green: 0.96, blue: 0.93, alpha: 1)
-        window.contentView = NSHostingView(rootView: SetupView(model: model) { [weak self] in self?.saveSettingsAndClose(start: true) })
+        window.contentView = NSHostingView(rootView: SetupView(
+            model: model,
+            save: { [weak self] in self?.saveSettingsAndClose(start: true) },
+            preview: { [weak self] sound in _ = self?.breakCompletionSound.play(sound) }
+        ))
         if let frame = (circlePanel?.screen ?? NSScreen.main)?.visibleFrame {
-            window.setFrameTopLeftPoint(NSPoint(x: frame.maxX - 30 - 284, y: frame.maxY - 55))
+            window.setFrameTopLeftPoint(NSPoint(x: frame.maxX - 30 - SetupView.size.width, y: frame.maxY - 55))
         } else { window.center() }
         setupWindow = window
         window.makeKeyAndOrderFront(nil)
@@ -246,9 +254,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func saveSettingsAndClose(start: Bool = false) {
         engine.updateSettings(focusMinutes: model.focusMinutes, breakMinutes: model.breakMinutes)
         loopEnabled = model.loopEnabled
+        breakSound = model.breakSound
         preferences.set(engine.focusMinutes, forKey: "focusMinutes")
         preferences.set(engine.breakMinutes, forKey: "breakMinutes")
         preferences.set(loopEnabled, forKey: "loopEnabled")
+        preferences.set(breakSound.rawValue, forKey: "breakSound")
         setupWindow?.orderOut(nil)
         setupWindow = nil
         if engine.phase == .ready {
@@ -343,7 +353,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             finishBreak()
             // Only a naturally completed countdown signals a return to work.
             // Emergency exit also restores the desktop, but must stay silent.
-            playBreakCompletionSound()
+            if breakSound != .none { playBreakCompletionSound(breakSound) }
         }
         if engine.phase == .ready, setupWindow == nil, loopEnabled, resumeGate.isArmed,
            resumeGate.consume(activityCount: activityCount()) {
@@ -400,6 +410,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         model.focusMinutes = engine.focusMinutes
         model.breakMinutes = engine.breakMinutes
         model.loopEnabled = loopEnabled
+        model.breakSound = breakSound
         model.breakDuration = engine.phaseDuration ?? Double(engine.breakMinutes * 60)
         previousPresentation = NSApp.presentationOptions
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp, .flagsChanged]) { [weak self] event in
@@ -497,6 +508,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             model.focusMinutes = 20
             model.breakMinutes = 3
             model.loopEnabled = false
+            model.breakSound = .defaultSound
             try save(SetupView(model: model, save: {}), name: "setup.png", scale: 2)
             model.phase = .breaking
             model.roundNumber = 1
@@ -545,14 +557,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func testBreakSound() {
-        guard breakCompletionSound.isLoaded, breakCompletionSound.duration > 0,
-              breakCompletionSound.play() else {
+        let sound = BreakSound.developer
+        let duration = breakCompletionSound.duration(for: sound)
+        guard breakCompletionSound.isLoaded(for: sound), duration > 0,
+              breakCompletionSound.play(sound) else {
             fputs("Fore2Break: bundled sound playback test failed.\n", stderr)
             exit(1)
         }
-        print(String(format: "Playing bundled break sound once (%.2f seconds).", breakCompletionSound.duration))
-        DispatchQueue.main.asyncAfter(deadline: .now() + breakCompletionSound.duration + 1) {
-            guard !self.breakCompletionSound.isPlaying else {
+        print(String(format: "Playing bundled break sound once (%.2f seconds).", duration))
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration + 1) {
+            guard !self.breakCompletionSound.isPlaying(for: sound) else {
                 fputs("Fore2Break: sound did not finish within its expected duration.\n", stderr)
                 exit(1)
             }
@@ -565,9 +579,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func runIntegrationTests() {
         var count = 0
         var soundPlayCount = 0
+        var lastPlayedSound: BreakSound?
         var desktopRestoredBeforeSound = true
-        playBreakCompletionSound = { [unowned self] in
+        playBreakCompletionSound = { [unowned self] sound in
             soundPlayCount += 1
+            lastPlayedSound = sound
             desktopRestoredBeforeSound = desktopRestoredBeforeSound
                 && self.engine.phase == .ready && self.breakWindows.isEmpty && self.keyMonitor == nil
         }
@@ -587,9 +603,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         check(setupWindow?.isVisible == true, "setup is visible")
         check(model.focusMinutes == 20 && model.breakMinutes == 3, "defaults")
         check(!loopEnabled && !model.loopEnabled, "Loop defaults off")
+        check(breakSound == .defaultSound && model.breakSound == .defaultSound, "sound defaults to the standard chime")
+        check(BreakSound(preference: "unknown") == .defaultSound, "invalid sound preferences use the default")
         check(!resumeGate.isArmed, "opening app never arms automatic restart")
-        check(breakCompletionSound.isLoaded && breakCompletionSound.duration > 0, "bundled MP3 decodes")
+        for sound in [BreakSound.developer, .defaultSound] {
+            check(breakCompletionSound.isLoaded(for: sound) && breakCompletionSound.duration(for: sound) > 0, "\(sound.title) audio decodes")
+        }
+        check(!breakCompletionSound.play(.none), "No sound does not start audio playback")
         check(soundPlayCount == 0, "opening the app is silent")
+        for sound in BreakSound.allCases {
+            model.breakSound = sound
+            saveSettingsAndClose()
+            check(BreakSound(preference: preferences.string(forKey: "breakSound")) == sound, "\(sound.title) preference persists")
+            model.breakSound = .none
+            showSettings(nil)
+            check(model.breakSound == sound && breakSound == sound, "reopening settings restores \(sound.title)")
+        }
         saveSettingsAndClose(start: true)
         check(engine.phase == .focusing, "Start begins focus immediately")
         check(setupWindow == nil, "Start hides compact popup")
@@ -651,8 +680,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         model.focusMinutes = 15
         model.breakMinutes = 2
         model.loopEnabled = true
+        model.breakSound = .developer
         saveSettingsAndClose(start: true)
         check(loopEnabled && preferences.bool(forKey: "loopEnabled"), "Loop choice is saved")
+        check(breakSound == .developer && preferences.string(forKey: "breakSound") == "developer", "Start saves the developer sound")
         check(engine.phase == .focusing && engine.phaseDuration == 900, "Loop requires an initial manual Start")
         let focusDeadline = engine.deadline
         simulatedActivity += 1
@@ -661,11 +692,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         showSettings(nil)
         model.focusMinutes = 25
         model.loopEnabled = false
+        model.breakSound = .none
         testAdvance += 901
         tick()
         check(engine.phase == .breaking && engine.phaseDuration == 120, "Loop uses chosen break duration")
         check(setupWindow == nil, "focus expiry dismisses settings so Loop can resume later")
         check(model.focusMinutes == 15 && model.loopEnabled, "break preserves saved settings and discards unsubmitted edits")
+        check(model.breakSound == .developer && breakSound == .developer, "break discards an unsubmitted sound change")
         let breakDeadline = engine.deadline
         simulatedActivity += 20
         tick()
@@ -728,6 +761,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 engine.updateSettings(focusMinutes: 10, breakMinutes: minutes)
                 loopEnabled = looping
                 model.loopEnabled = looping
+                breakSound = looping ? .defaultSound : .developer
+                model.breakSound = breakSound
                 resumeGate.cancel()
                 let before = soundPlayCount
                 startFocus()
@@ -742,6 +777,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 testAdvance += 2
                 tick()
                 check(engine.phase == .ready && soundPlayCount == before + 1, "completed \(minutes)-minute break plays once with Loop \(looping)")
+                check(lastPlayedSound == breakSound, "completion plays the saved sound choice")
                 check(desktopRestoredBeforeSound, "desktop restoration precedes playback")
                 tick()
                 wokeUp()
@@ -757,6 +793,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 check(soundPlayCount == before + 1, "emergency exit is silent in both modes")
             }
         }
+        for looping in [false, true] {
+            loopEnabled = looping
+            showSettings(nil)
+            model.breakSound = .none
+            saveSettingsAndClose(start: true)
+            let before = soundPlayCount
+            testAdvance += Double(engine.focusMinutes * 60) + 1
+            tick()
+            check(engine.phase == .breaking, "muting does not prevent the break")
+            testAdvance += engine.phaseDuration! + 1
+            tick()
+            check(engine.phase == .ready && soundPlayCount == before, "No sound keeps completed breaks silent with Loop \(looping)")
+            check(resumeGate.isArmed == looping, "No sound preserves Loop behavior")
+        }
+        breakSound = .defaultSound
+        model.breakSound = breakSound
         // Round labels and fourth-round timing must stay in sync across UI.
         engine = SessionEngine()
         loopEnabled = true

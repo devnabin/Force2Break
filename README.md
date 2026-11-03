@@ -15,16 +15,17 @@ So I decided to vibe code **Fore2Break** with AI assistance. It’s a small nati
 1. Open the app and choose your focus and break times in the compact popup.
 2. Press **Start**. The popup disappears while you work.
 3. When focus time ends, a countdown covers every connected display, across Spaces. Normal app switching is blocked during the break. The screen encourages you to look away and walk a little.
-4. At the natural end of the break, the desktop returns, the completion sound plays once, and the completed-round count increases.
+4. At the natural end of the break, the desktop returns, your selected sound plays once (unless muted), and the completed-round count increases.
 5. With Loop off, click the floating circle to start another session. You can drag the circle to a convenient spot. With Loop on, no circle appears; the app waits for your first activity to start the next session.
 
 | Setting | Default | Choices |
 | --- | --- | --- |
 | Focus | 20 minutes | 10, 15, 20, 25 minutes |
 | Standard break | 3 minutes | 2, 3, 4, 5 minutes |
+| Break sound | Default | No sound, Developer, Default (macOS Glass chime). Use **Preview** to hear the selected sound. |
 | Loop | Off | On or off |
 
-Your durations and Loop preference are saved. The menu bar shows the round indicator, remaining time, and settings. **The app must stay open** for its timers and break screens to work.
+Your durations, sound choice, and Loop preference are saved. The menu bar shows the round indicator, remaining time, and settings. **The app must stay open** for its timers and break screens to work.
 
 ### A longer pause every four rounds
 
@@ -52,7 +53,7 @@ Fore2Break is a break reminder, not a security lock. macOS recovery controls, in
 
 **Choose your times and press Start.**
 
-<img src="assets/setup.png" alt="Compact popup with focus choices, break choices, Loop, and Start" width="320">
+<img src="assets/setup.png" alt="Compact popup with focus choices, break choices, sound selection with Preview, Loop, and Start" width="320">
 
 **Take a break while the countdown runs.**
 
