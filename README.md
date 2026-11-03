@@ -27,13 +27,22 @@ So I decided to vibe code **Fore2Break** with AI assistance. It’s a small nati
 | Break sound | Default | No sound, Developer, Default (macOS Glass chime). Use **Preview** to hear the selected sound. |
 | Loop | Off | On or off |
 
-Your durations, sound choice, and Loop preference are saved. Today's round count is saved too, so quitting the app keeps it; it starts again at 0 each new day. The menu also shows a daily summary, such as **Today: 6 rounds · 2h 0m focused**; only finished rounds count. Choose **Launch at login** in the menu bar menu to open Fore2Break automatically when you log in. The menu bar shows the round indicator, remaining time, and settings. **The app must stay open** for its timers and break screens to work.
+Your durations, sound choice, and Loop preference are saved. **The app must stay open** for its timers and break screens to work.
+
+### The menu bar
+
+Fore2Break lives in the menu bar; it has no Dock icon. The menu bar shows the round and the time left, such as `R: 2 | 14:32`, or **Away** / **On a call** when those apply. Its menu includes:
+
+- **Today's summary**, such as **Today: 6 rounds · 2h 0m focused**. Only finished rounds count. It is kept when you quit and starts again at 0 each new day.
+- **Focus & break settings…**, **Start focus**, and **Show start circle**.
+- **Launch at login**, to open Fore2Break automatically when you log in. If macOS asks for approval, allow it in System Settings › General › Login Items. Move the app to Applications before turning this on.
+- **Quit Fore2Break** (not available during a break).
 
 ### A longer pause every four rounds
 
 A round is a focus session followed by its naturally completed break. The first three rounds use your selected standard break. The fourth uses a **10-minute break** in its place, then the pattern repeats: short, short, short, long on rounds **4, 8, 12, …**. Your saved standard break choice stays unchanged.
 
-Round progress appears as **`R:n`** in the menu bar and on the break screen. During focus or a break, it shows the current round; when idle, it shows the completed count, starting at `R:0`. For example, the menu can show `R:4 | 12:34` during the fourth focus session. Round counts start fresh each time you launch the app; they are not saved between launches. Ending a break with the emergency shortcut does not count as completing a round.
+Round progress appears as **`R:n`** in the menu bar and on the break screen. During focus or a break, it shows the current round; when idle, it shows the completed count, starting at `R:0`. For example, the menu can show `R:4 | 12:34` during the fourth focus session. Today's round count is kept if you quit and reopen the app, and starts again at `R:0` each new day. A round that finishes after midnight counts toward the new day. Ending a break with the emergency shortcut does not count as completing a round.
 
 ### Reminders to look away and move
 
@@ -103,19 +112,21 @@ After building, you can run the app integration checks:
 RUN_UI_TESTS=1 ./test.sh
 ```
 
-These checks briefly show the actual break screens, so run them when you can pause other work. The standalone tests cover timer transitions and the activity gate; the app checks cover window behavior, Loop, emergency release, and completion-sound wiring.
+These checks briefly show the actual break screens, so run them when you can pause other work. The app checks cover window behavior, Loop, emergency release, and completion-sound wiring.
+
+The standalone tests cover the timer and round cadence for every focus and break choice, the Loop activity gate, away detection, the call hold, and saving today's rounds and summary.
 
 To install a local build, move `dist/Fore2Break.app` into **Applications**. Builds are locally signed and are not notarized by Apple. If macOS blocks opening the app, follow [Apple’s opening instructions](https://support.apple.com/en-us/102445).
 
 ## Built with
 
-Swift, SwiftUI, AppKit, and AVFoundation. The timer uses a continuous clock so changing the Mac’s wall clock does not shorten a session.
+Swift, SwiftUI, AppKit, and AVFoundation, plus ServiceManagement (launch at login), IOKit, CoreAudio, and CoreMediaIO (presence and call detection). The timer uses a continuous clock so changing the Mac’s wall clock does not shorten a session.
 
-No account or network connection is required. Loop checks aggregate system interaction counts; it does not read or store what you type, click, or scroll.
+No account or network connection is required. Loop and away detection check aggregate system interaction counts; they do not read or store what you type, click, or scroll. Call detection only asks macOS whether any camera or microphone is in use; it never accesses audio or video, and needs no permission.
 
 ```text
 Source/               Native app, views, timer, activity gate, audio playback
-Tests/                Deterministic timer and activity-gate tests
+Tests/                Deterministic tests: timer, activity gate, away, call hold, daily rounds
 Tools/                App icon generator
 Resources/Info.plist  App metadata
 build.sh              Build and package the Mac app
@@ -123,6 +134,7 @@ test.sh               Run tests
 index.html            Standalone project page
 assets/               Screenshots and project visuals
 content.txt           LinkedIn post draft
+AGENTS.md             Instructions for AI coding agents (CLAUDE.md points to it)
 ```
 
 ### Audio acknowledgment
@@ -144,4 +156,3 @@ If you want to host that page with GitHub Pages after pushing this folder’s co
 3. Select the branch containing `index.html`, choose **/(root)**, and click **Save**.
 
 GitHub will provide the site address after publication. See [GitHub’s Pages setup documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site).
-# Force2Break
