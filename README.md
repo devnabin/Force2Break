@@ -8,7 +8,9 @@ So I decided to vibe code **Fore2Break** with AI assistance. It’s a small nati
 
 ![Fore2Break: choose a focus time, work, then take a screen break](assets/overview.png)
 
-[How it works](#how-it-works) · [Screenshots](#a-closer-look) · [Build and run](#build-and-run) · [Audio credits](#audio-acknowledgment)
+[How it works](#how-it-works) · [Screenshots](#a-closer-look) · [Build and run](#build-and-run) · [Audio credits](#audio-acknowledgment) · [License](#license)
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 ## How it works
 
@@ -135,6 +137,7 @@ index.html            Standalone project page
 assets/               Screenshots and project visuals
 content.txt           LinkedIn post draft
 AGENTS.md             Instructions for AI coding agents (CLAUDE.md points to it)
+LICENSE               MIT License
 ```
 
 ### Audio acknowledgment
@@ -156,3 +159,11 @@ If you want to host that page with GitHub Pages after pushing this folder’s co
 3. Select the branch containing `index.html`, choose **/(root)**, and click **Save**.
 
 GitHub will provide the site address after publication. See [GitHub’s Pages setup documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site).
+
+## License
+
+Fore2Break is open source under the [MIT License](LICENSE). © 2026 Nabin Bhandari.
+
+You're free to use, copy, change, and share the code, including in your own projects, as long as you keep the copyright and license notice. The software comes with no warranty.
+
+**Not included:** the third-party break sound is not covered by the MIT License and is not part of this repository. See [Audio acknowledgment](#audio-acknowledgment).
