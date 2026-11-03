@@ -18,6 +18,7 @@ So I decided to vibe code **Fore2Break** with AI assistance. It’s a small nati
 4. At the natural end of the break, the desktop returns, your selected sound plays once (unless muted), and the completed-round count increases.
 5. With Loop off, click the floating circle to start another session. You can drag the circle to a convenient spot. With Loop on, no circle appears; the app waits for your first activity to start the next session.
 6. If you step away during focus (no keyboard, mouse, or trackpad input for 5 minutes, or for the break length if that is longer), that time counts as rest. The app skips the break screen, shows **Away** in the menu bar, and restarts focus on your first activity when you return. Playing video, video calls, and presentations keep you counted as present. The abandoned round is not counted.
+7. If a break is due while you are on a call (any app using the camera or microphone), the break waits until the call ends, for at most 15 minutes. The menu bar shows **On a call** while it waits. The break that follows is always the full length.
 
 | Setting | Default | Choices |
 | --- | --- | --- |

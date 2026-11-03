@@ -31,12 +31,12 @@ fi
 
 echo "Building the Apple silicon application…"
 /usr/bin/xcrun swiftc "${SWIFT_FLAGS[@]}" -target arm64-apple-macos13.0 \
-  -framework AppKit -framework SwiftUI -framework AVFoundation -framework ServiceManagement -framework IOKit \
+  -framework AppKit -framework SwiftUI -framework AVFoundation -framework ServiceManagement -framework IOKit -framework CoreAudio -framework CoreMediaIO \
   "${SOURCES[@]}" -o "$BUILD_DIR/$APP_NAME-arm64"
 
 echo "Building Intel support…"
 if /usr/bin/xcrun swiftc "${SWIFT_FLAGS[@]}" -target x86_64-apple-macos13.0 \
-  -framework AppKit -framework SwiftUI -framework AVFoundation -framework ServiceManagement -framework IOKit \
+  -framework AppKit -framework SwiftUI -framework AVFoundation -framework ServiceManagement -framework IOKit -framework CoreAudio -framework CoreMediaIO \
   "${SOURCES[@]}" -o "$BUILD_DIR/$APP_NAME-x86_64" \
   2>"$BUILD_DIR/intel-build.log"; then
   /usr/bin/xcrun lipo -create "$BUILD_DIR/$APP_NAME-arm64" "$BUILD_DIR/$APP_NAME-x86_64" \

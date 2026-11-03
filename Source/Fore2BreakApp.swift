@@ -92,6 +92,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     /// Set when focus was abandoned because the user stepped away; the next
     /// interaction restarts focus even with Loop off.
     private var awayResumePending = false
+    private var callHold = CallHold()
+    private var lastCallCheck: Date?
+    private var cachedCallInProgress = false
     private let breakCompletionSound = BreakCompletionSound()
     private lazy var playBreakCompletionSound: (BreakSound) -> Void = { [weak self] sound in
         _ = self?.breakCompletionSound.play(sound)
@@ -378,6 +381,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         guard engine.start(now: now) else { return }
         resumeGate.cancel()
         awayResumePending = false
+        callHold.reset()
         awayDetector.reset(activityCount: activityCount(), now: now)
         circlePanel?.orderOut(nil)
         setupWindow?.orderOut(nil)
@@ -400,7 +404,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     @objc private func tick() {
         let instant = now
         checkForAway(at: instant)
-        let transition = engine.tick(now: instant)
+        let transition = holdBreakForCall(at: instant) ? nil : engine.tick(now: instant)
         synchronizeModel(at: instant)
         if transition == .focusEnded { beginBreak() }
         if transition == .breakEnded {
@@ -431,7 +435,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let threshold = TimeInterval(max(5, engine.activeBreakMinutes ?? engine.breakMinutes) * 60)
         let count = activityCount()
         switch awayDetector.observe(activityCount: count, now: instant, threshold: threshold,
-                                    presenceHeld: ActivitySource.displayKeptAwake()) {
+                                    presenceHeld: ActivitySource.displayKeptAwake() || callInProgress(at: instant)) {
         case .present:
             return
         case .returned:
@@ -444,6 +448,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             synchronizeModel(at: instant)
             if !awayResumePending { showCircle() }
         }
+    }
+
+    /// A break due during a video call waits until the call ends, at most
+    /// `CallHold.maximumDelay`. The engine starts a full break whenever it is
+    /// next ticked, so skipping its tick cannot shorten the break.
+    private func holdBreakForCall(at instant: Date) -> Bool {
+        guard !testing, engine.phase == .focusing,
+              let deadline = engine.deadline, instant >= deadline else { return false }
+        return callHold.shouldHold(callInProgress: callInProgress(at: instant), now: instant)
+    }
+
+    /// Device checks are cheap but not free, so poll them at most once a second.
+    private func callInProgress(at instant: Date) -> Bool {
+        if let lastCallCheck, instant.timeIntervalSince(lastCallCheck) < 1 { return cachedCallInProgress }
+        lastCallCheck = instant
+        cachedCallInProgress = CallSource.callInProgress()
+        return cachedCallInProgress
     }
 
     private func updateMenu() {
@@ -466,6 +487,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 statusItem.button?.toolTip = "Fore2Break · click the floating circle to focus"
                 stateItem.title = "\(round) completed · \(engine.focusMinutes) min focus / \(engine.breakMinutes) min break"
             }
+        case .focusing where callHold.isHolding:
+            let limit = BreakView.timeString(Int(ceil(callHold.remainingDelay(now: now))))
+            statusItem.button?.title = " \(round) | On a call"
+            statusItem.button?.toolTip = "Fore2Break · your break starts when the call ends, or in \(limit)"
+            stateItem.title = "\(round) · Break waits for your call · at most \(limit)"
         case .focusing:
             let remaining = BreakView.timeString(engine.remainingSeconds(now: now))
             statusItem.button?.title = " \(round) | \(remaining)"
